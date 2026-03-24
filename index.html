@@ -486,52 +486,48 @@ textarea{min-height:70px;resize:vertical;}
 var JBIN_KEY = '$2a$10$DLJTM0j02cjL6fh4znP27e5cn2Fz13dhjqMz/hor92lFotLyvC3PK';
 var JBIN_BASE = 'https://api.jsonbin.io/v3/b';
 
-function getBinId(col) { return localStorage.getItem('tg_bin_'+col); }
-function setBinId(col, id) { localStorage.setItem('tg_bin_'+col, id); }
+// ID fissi dei bin
+var BIN_IDS = {
+  'catena_chains': '69c22e5eaa77b81da9132e1f',
+  'ctc_sessions':  '69c22fceb7ec241ddc99520d',
+  'gf_sessions':   '69c22f6bc3097a1dd55420b1',
+  'riddles':       '69c2303bc3097a1dd554245a'
+};
 
 async function dbLoad(col) {
-  var id = getBinId(col);
-  if (!id) return [];
+  var binId = BIN_IDS[col];
+  if (!binId) return [];
   try {
-    var res = await fetch(JBIN_BASE+'/'+id+'/latest', {
+    var res = await fetch(JBIN_BASE+'/'+binId+'/latest', {
       headers: {'X-Master-Key': JBIN_KEY, 'X-Bin-Meta': 'false'}
     });
     if (!res.ok) return [];
     var data = await res.json();
-    return Array.isArray(data) ? data : [];
+    if (Array.isArray(data)) return data.filter(function(x){ return x && x.id && x.id !== 'init'; });
+    return [];
   } catch(e) { return []; }
 }
 
 async function dbSave(col, id, data) {
   data.id = id;
+  var binId = BIN_IDS[col];
+  if (!binId) throw new Error('Bin non trovato per '+col);
   var arr = await dbLoad(col);
   var idx = arr.findIndex(function(x){ return x.id === id; });
   if (idx >= 0) arr[idx] = data; else arr.push(data);
-  var binId = getBinId(col);
-  if (!binId) {
-    var res = await fetch(JBIN_BASE, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','X-Master-Key':JBIN_KEY,'X-Bin-Name':'tg_'+col,'X-Bin-Private':'true'},
-      body: JSON.stringify(arr)
-    });
-    if (!res.ok) throw new Error('Errore creazione bin');
-    var json = await res.json();
-    setBinId(col, json.metadata.id);
-  } else {
-    var res2 = await fetch(JBIN_BASE+'/'+binId, {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json','X-Master-Key':JBIN_KEY},
-      body: JSON.stringify(arr)
-    });
-    if (!res2.ok) throw new Error('Errore aggiornamento bin');
-  }
+  var res = await fetch(JBIN_BASE+'/'+binId, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json','X-Master-Key':JBIN_KEY},
+    body: JSON.stringify(arr)
+  });
+  if (!res.ok) throw new Error('Errore salvataggio: '+res.status);
 }
 
 async function dbDelete(col, id) {
+  var binId = BIN_IDS[col];
+  if (!binId) return;
   var arr = await dbLoad(col);
   arr = arr.filter(function(x){ return x.id !== id; });
-  var binId = getBinId(col);
-  if (!binId) return;
   await fetch(JBIN_BASE+'/'+binId, {
     method: 'PUT',
     headers: {'Content-Type':'application/json','X-Master-Key':JBIN_KEY},
